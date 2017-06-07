@@ -1,0 +1,112 @@
+#!/bin/bash
+. jinarch.conf
+msg_out(){
+	printf "\n*** $*\n" > /dev/stdout
+}
+
+err_out(){
+	printf "\nE: $*\n" > /dev/stderr
+}
+
+wrn_out(){
+	printf "\nW: $*\n" > /dev/stderr
+}
+
+err_exit(){
+	err_out "$*"
+	exit 1
+}
+
+chkroot(){
+	if [ "$(id -u)" != "0" ]; then
+	  err_out "root access required."
+	  exit 1
+	fi
+}
+
+chknorm(){
+	if [ "$(id -u)" = "0" ]; then
+	  wrn_out "Running as root not recommended. May produce some problems. Better run as a normal user."
+	  return 1
+	fi
+}
+
+get_input(){
+	#$1: msg
+	#$2: timeout
+	local msg="
+	=== $(printf "$1")"
+	msg=$(echo "$msg" |sed -e 's/^[[:blank:]]*//')
+	local inp
+	local timeout="$2"
+	if [ "$timeout" = "" ]; then
+		read -p "$msg" inp >/dev/null
+	else
+		read -t "$timeout" -p "$msg" inp >/dev/null
+	fi
+	echo "$inp" > /dev/stdout
+}
+
+list_keymaps(){
+    find /usr/share/kbd/keymaps -type f -printf '%P\n' |sed -e 's=.*/==' -e 's/\..*$//' | sort -u
+}
+
+get_prop_input(){
+	local prop="$1"
+	local def="$2"
+	local msg="$3"
+    local cmd=$4
+    local timeout="$5"
+	local bval="${!prop}"
+	local val="$bval"
+	if [ "$bval" = "" ]; then
+        $cmd
+		val=$(get_input "$msg (default '$def'): " "$timeout")
+		if [ "$val" = "" ]; then
+			val="$def"
+		fi
+	fi
+	echo "$val" >/dev/stdout
+}
+
+
+insert_prop(){
+    prop=$1
+    val=$2
+    file=$3
+    if grep -qs -e "^[[:blank:]]*$prop[[:blank:]]*=[[:blank:]]*" "$file"; then
+        sed -i.bak "s/\(^[[:blank:]]*$prop[[:blank:]]*=[[:blank:]]*\).*/\1$val/" "$file"
+    else
+        cat >> "$file" <<< "$prop=$val"
+    fi
+}
+
+msg_out 'KeyMap settings'
+keymap_conf=/etc/vconsole.conf
+keymap_prop=KEYMAP
+KEYMAP=$(get_prop_input $keymap_prop us "Enter keymap" list_keymaps)
+insert_prop $keymap_prop $KEYMAP "$keymap_conf"
+
+msg_out 'Teypematic delay and rate'
+msg_out 'The typematic delay indicates the amount of time (typically in miliseconds) a key needs to be pressed and held in order for the repeating process to begin. After the repeating process has been triggered, the character will be repeated with a certain frequency (usually given in Hz) specified by the typematic rate. These values can be changed using the kbdrate command'
+KBD_DELAY=200
+KBD_RATE=30
+kbdrate_service_s="[Unit]
+Description=Keyboard repeat rate in tty.
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+StandardInput=tty
+StandardOutput=tty
+ExecStart=/usr/bin/kbdrate -s -d $KBD_DELAY -r $KBD_RATE
+ 
+[Install]
+WantedBy=multi-user.target
+"
+kbdrate_service_f=/etc/systemd/system/kbdrate.service
+cat > "$kbdrate_service_f" <<< "$kbdrate_service_s"
+systemctl enable kbdrate
+
+##Checking network connection
+ping -c 1 google.com
