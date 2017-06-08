@@ -35,16 +35,29 @@
 # ##############################################################################
 
 myself="$BASH_SOURCE"
-pname=$(basename "$myself")
+pname=jinarch
+author="Md. Jahidul Hamid <jahidulhamid@yahoo.com>"
+bugt="https://github.com/neurobin/$pname"
+pver='1.0.0'
+verinfo="
+*********** $pname ***********
+Version:    $pver
+Author:     $author
+Bug report: $bugt
+"
+if [ "$1" = -v ] || [ "$1" = --version ]; then
+    echo "$verinfo"
+    exit 1
+fi
 
 if [ -f /etc/jinarch.conf ]; then
     . /etc/jinarch.conf
 elif [ -f ./jinarch.conf ]; then
-    . ./jinarch.conf
+    . jinarch.conf
 else
     echo "W: jinarch.conf file not found" >/dev/stderr
 fi
-pname=jinarch
+
 DEF_KEYMAP=us
 DEF_KBD_DELAY=200
 DEF_KBD_RATE=30
@@ -470,9 +483,11 @@ if [ "$1" = '' ]; then
     msg_out 'genfstab -U /mnt >> /mnt/etc/fstab'
     _star_e
     genfstab -U /mnt >> /mnt/etc/fstab
+    sed -i.bak -e '/^.*[[:blank:]][^[:blank:]][^[:blank:]]*[[:blank:]][[:blank:]]*swap[[:blank:]].*$/d' /mnt/etc/fstab
     cat >> /mnt/etc/fstab <<< "$fstabs" &&
     msg_out "Successfully generated fstab" ||
     err_out "Failed to generate fstab"
+    
     
     _star_s
     msg_out "Installing grub"
