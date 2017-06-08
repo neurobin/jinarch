@@ -147,10 +147,10 @@ list_keymaps(){
 
 chknet(){
     dhcpcd
-    if ping -c 1 google.com
+    if ping -c 1 google.com; then
         msg_out 'Network available'
         return 0
-    elif ping -c 1 8.8.8.8
+    elif ping -c 1 8.8.8.8; then
         wrn_out 'Network available but DNS resolving not working. Fix /etc/resolv.conf'
         return 1
     else
@@ -224,56 +224,55 @@ select_shell(){
     echo "${array[arri]}"
 }
 
-get_partition_mand(){
-    mp=$1
-    while [ "$fs" = '' ]; do
-        fs=$(get_prop_input FILE_SYSTEM_DEV '' "Enter the device id for mount point: $mp")
-        udevadm info -q symlink -n "$fs" >/dev/stderr &&
-        msg_out "^--Output of command: 'udevadm info -q symlink -n $fs'" >/dev/stderr || fs=
-        fdisk -l "$fs" >/dev/stderr &&
-        msg_out "^--Output of command: 'fdisk -l $fs'" >/dev/stderr || fs=
-        fdisk -l | grep "$fs" >/dev/stderr &&
-        msg_out "^--Output of command: 'fdisk -l | grep $fs'" >/dev/stderr || fs=
-        df -H |grep "$fs" >/dev/stderr &&
-        msg_out "^--Output of command 'df -H |grep $fs'" >/dev/stderr || fs=
-        if [ "$fs" = '' ]; then
-            err_out "Invalid device id: $fs"
-        fi
-        yes=$(get_yes_no "Is this the right device for mount point $mp")
-        if [ "$yes" != yes ]; then
-            fs=
-        fi
-        if [ "$fs" != '' ]; then
-            break
-        fi
-    done
-    echo "$fs" >/dev/stdout
-}
-
-is_valid_part(){
-    fs=$1
+confirm_disk(){
+    dev="$1"
     mp=$2
-    if [ "$fs" = '' -o "$fs" = none ]; then
-        return 1
-    fi
-    udevadm info -q symlink -n "$fs" >/dev/stderr &&
-    msg_out "^--Output of command: 'udevadm info -q symlink -n $fs'" >/dev/stderr || fs=
-    fdisk -l "$fs" >/dev/stderr &&
-    msg_out "^--Output of command: 'fdisk -l $fs'" >/dev/stderr || fs=
-    fdisk -l | grep "$fs" >/dev/stderr &&
-    msg_out "^--Output of command: 'fdisk -l | grep $fs'" >/dev/stderr || fs=
-    df -H |grep "$fs" >/dev/stderr &&
-    msg_out "^--Output of command 'df -H |grep $fs'" >/dev/stderr || fs=
-    if [ "$fs" = '' ]; then
-        return 1
-    fi 
-    yes=$(get_yes_no "Is this the right device for mount point $mp")
-    if [ "$yes" = yes ]; then
+    msg_out "Giving more info for confirmation"
+    msg_out "'fdisk -l $dev' says: \n\n$(fdisk -l "$dev")"
+    msg_out "'blkid $dev' says: \n\n$(blkid "$dev")"
+    msg_out
+    msg_out "$dev is going to be mounted as $mp"
+    read -p "=== Please confirm (Y/n)?: " conf
+    if [ "$conf" = Y ] || [ "$conf" = y ]; then
+        msg_out "$dev confirmed..."
         return 0
     else
         return 1
     fi
 }
+
+select_disk(){
+    mp=$1
+    oIFS="$IFS"
+    IFS=$'\n'
+    diskl=($(fdisk -l 2>/dev/null |grep -i '^/dev/.*linux'))
+    IFS="$oIFS"
+    if [ "$mp" != '/' ]; then
+        last_option="Do not use a separate $mp"
+        diskl+=("$last_option")
+    fi
+    PS3="
+=== Choose a device (#?): "
+    printf "\n=== Please choose the device for mount point $mp: \n" >/dev/stderr
+    echo >/dev/stderr
+    select dev in "${diskl[@]}"; do
+        if [ "$dev" != "$last_option" -o "$last_option" = '' ]; then
+            if [ "$dev" = "" ]; then
+                continue
+            fi
+            dev=$(echo "$dev" | sed -n 's#\(/dev/[^[:blank:]]*\).*#\1#p')
+            msg_out "you have chosen: $dev" >/dev/stderr
+            if confirm_disk "$dev" "$mp" >/dev/stderr; then
+                echo "$dev"
+                break
+            fi
+        else
+          msg_out "$mp will be inside root filesystem (/)" >/dev/stderr
+          break
+        fi
+    done
+}
+
 
 if [ "$1" = '' ]; then
 
@@ -302,16 +301,18 @@ if [ "$1" = '' ]; then
     declare -A dev
     fmps=()
     for mp in "${mps[@]}"; do
-        if [ "$mp" = '/' ]; then
-            dev[$mp]=$(get_partition_mand $mp)
+        #~ if [ "$mp" = '/' ]; then
+        dev[$mp]=$(select_disk $mp)
+        if [ "${dev[$mp]}" != '' ]; then
             fmps+=("$mp")
-        else
-            d=$(get_prop_input $opn[$mp] "$DEF_OPT_DEV" "Enter device id for mount point $mp")
-            if is_valid_part "$d" $mp; then
-                dev[$mp]=$d
-                fmps+=("$mp")
-            fi
-        fi 
+        fi
+        #~ else
+            #~ d=$(get_prop_input $opn[$mp] "$DEF_OPT_DEV" "Enter device id for mount point $mp")
+            #~ if is_valid_part "$d" $mp; then
+                #~ dev[$mp]=$d
+                #~ fmps+=("$mp")
+            #~ fi
+        #~ fi 
     done
     
     for mp in "${fmps[@]}"; do
