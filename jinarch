@@ -14,12 +14,23 @@ DEF_HOSTNAME=archlinux
 DEF_INTEL_UCODE=y
 DEF_USER="$pname"
 DEF_OPT_DEV=none
+DEF_USE_REFLECTOR=y
+
+
+mps=('/' '/boot' '/home' '/var' '/tmp' 'swap')
+declare -A opn=([/boot]=BOOT_DEV [/home]=HOME_DEV [/var]=VAR_DEV [/tmp]=TMP_DEV)
+
 msg_out(){
 	printf "*** $*\n" > /dev/stdout
 }
 
 _star_s(){
-    local s='***************************************************************'
+    if [ "$1" = '' ]; then
+        title='**********'
+    else
+        title=' ($1) '
+    fi
+    local s="************************$title*****************************"
     printf "\n\n\n*** $s\n" > /dev/stdout
 }
 
@@ -72,9 +83,9 @@ get_yn(){
 	local yn
     local timeout="$2"
 	if [ "$timeout" = "" ]; then
-		read -p "$msg" yn >/dev/null 2>&1
+		read -p "$msg" yn >/dev/stderr 2>&1
 	else
-		read -t "$timeout" -p "$msg" yn >/dev/null 2>&1
+		read -t "$timeout" -p "$msg" yn >/dev/stderr 2>&1
 	fi
 	if [ "$yn" = y ]; then
 		echo y > /dev/stdout
@@ -93,9 +104,9 @@ get_yes_no(){
     local timeout="$2"
     while true; do
         if [ "$timeout" = "" ]; then
-            read -p "$msg (yes/no)?: " yn >/dev/null
+            read -p "$msg (yes/no)?: " yn >/dev/stderr
         else
-            read -t "$timeout" -p "$msg (yes/no)?: " yn >/dev/null
+            read -t "$timeout" -p "$msg (yes/no)?: " yn >/dev/stderr
         fi
         if [ "$yn" = yes ]; then
             echo yes > /dev/stdout
@@ -117,7 +128,7 @@ get_prop_yn(){
 	local bval="${!prop}"
 	local val="$bval"
 	if [ "$bval" = "" ]; then
-        $cmd > /dev/stderr
+        #$cmd > /dev/stderr
 		local val=$(get_yn "$msg (Y/n)? (default '$def'): " "$timeout")
 		[ "$val" = "" ] && val="$def"
 	fi
@@ -133,9 +144,9 @@ get_input(){
 	local inp
 	local timeout="$2"
 	if [ "$timeout" = "" ]; then
-		read -p "$msg" inp >/dev/null
+		read -p "$msg" inp >/dev/stderr
 	else
-		read -t "$timeout" -p "$msg" inp >/dev/null
+		read -t "$timeout" -p "$msg" inp >/dev/stderr
 	fi
 	echo "$inp" > /dev/stdout
 }
@@ -234,7 +245,7 @@ confirm_disk(){
     msg_out "$dev is going to be mounted as $mp"
     read -p "=== Please confirm (Y/n)?: " conf
     if [ "$conf" = Y ] || [ "$conf" = y ]; then
-        msg_out "$dev confirmed..."
+        msg_out "$dev confirmed as $mp..."
         return 0
     else
         return 1
@@ -253,7 +264,7 @@ select_disk(){
     fi
     PS3="
 === Choose a device (#?): "
-    printf "\n=== Please choose the device for mount point $mp: \n" >/dev/stderr
+    printf "\n=== Please choose a partition for $mp: \n" >/dev/stderr
     echo >/dev/stderr
     select dev in "${diskl[@]}"; do
         if [ "$dev" != "$last_option" -o "$last_option" = '' ]; then
@@ -267,12 +278,35 @@ select_disk(){
                 break
             fi
         else
-          msg_out "$mp will be inside root filesystem (/)" >/dev/stderr
-          break
+            if [ "$mp" != swap ]; then
+                msg_out "$mp will be inside root filesystem (/)." >/dev/stderr
+            else
+                msg_out "swap will not be used." >/dev/stderr
+            fi
+            break
         fi
     done
 }
 
+get_uuid(){
+    lsblk -no UUID "$1"
+}
+
+finish(){
+    mounted=$(mount |awk '{print $3}')
+    for mp in "${mps[@]}"; do
+        mpt="/mnt$mp"
+        mpt="${mpt/%\//}"
+        if echo "$mounted" |grep -qF "$mpt"; then
+            if umount "$mpt" || umount -lf "$mpt" ; then
+                msg_out "unmount proc success"
+            else
+                err_out "Failed to unmount $mpt"
+            fi
+        fi
+    done
+    rm -f /jinarch /jinarch.conf
+}
 
 if [ "$1" = '' ]; then
 
@@ -296,23 +330,38 @@ if [ "$1" = '' ]; then
     msg_out 'parted, cfdisk etc...'
     _star_e
     
-    mps=('/' '/boot' '/home' '/var' '/tmp')
-    declare -A opn=([/boot]=BOOT_DEV [/home]=HOME_DEV [/var]=VAR_DEV [/tmp]=TMP_DEV)
     declare -A dev
     fmps=()
     for mp in "${mps[@]}"; do
-        #~ if [ "$mp" = '/' ]; then
-        dev[$mp]=$(select_disk $mp)
-        if [ "${dev[$mp]}" != '' ]; then
-            fmps+=("$mp")
-        fi
-        #~ else
-            #~ d=$(get_prop_input $opn[$mp] "$DEF_OPT_DEV" "Enter device id for mount point $mp")
-            #~ if is_valid_part "$d" $mp; then
-                #~ dev[$mp]=$d
-                #~ fmps+=("$mp")
-            #~ fi
-        #~ fi 
+        dev[$mp]="${DEV[$mp]}"
+        if [ "$mp" = '/' ]; then
+            if [ "${dev[$mp]:0:1}" != / ]; then
+                dev[$mp]=$(select_disk $mp)
+            fi
+            if [ "${dev[$mp]}" != '' ]; then
+                fmps+=("$mp")
+            fi
+        elif [ "$mp" = swap ] && [ "${dev[$mp]}" != none ]; then
+            if [ "${dev[$mp]:0:1}" != / ]; then
+                dev[$mp]=$(select_disk $mp)
+            fi
+            if [ "${dev[$mp]}" != '' ]; then
+                fstabs="UUID=$(get_uuid "${dev[$mp]}") none swap defaults 0 0"
+            fi
+        elif [ "${dev[$mp]}" != none ]; then
+            if [ "${dev[$mp]:0:1}" != / ]; then
+                dev[$mp]=$(select_disk $mp)
+            fi
+            if [ "${dev[$mp]}" != '' ]; then
+                fmps+=("$mp")
+            fi
+        else
+            if [ "$mp" != swap ]; then
+                msg_out "$mp will be inside /"
+            else
+                msg_out "$mp is not being used"
+            fi
+        fi 
     done
     
     for mp in "${fmps[@]}"; do
@@ -331,8 +380,8 @@ if [ "$1" = '' ]; then
     msg_out 'another terminal (Alt+Arrows in virtual console) and use your own'
     msg_out 'method (e.g using rankmirrors). Skip this step ((y/n):n) when done'
     _star_e
-
-    yn=$(get_prop_yn USE_REFLECTOR y 'Update mirrors with reflector ranking')
+    
+    yn=$(get_prop_yn USE_REFLECTOR "$DEF_USE_REFLECTOR" 'Update mirrors with reflector ranking')
 
     if [ "$yn" = y ]; then
         if ! chkcmd reflector; then
@@ -345,27 +394,38 @@ if [ "$1" = '' ]; then
 
     _star_s
     msg_out Installing the base packages
-    msg_out 'pacstrap /mnt base'
+    msg_out Copying files ...
     _star_e
-    pacstrap /mnt base
+    #pacstrap /mnt base
+    rsync -aAXv --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found"} / /mnt
 
     _star_s
     msg_out Generating /etc/fstab file
     msg_out 'genfstab -U /mnt >> /mnt/etc/fstab'
     _star_e
     genfstab -U /mnt >> /mnt/etc/fstab
+    cat >> /mnt/etc/fstab <<< "$fstabs"
+    
+    _star_s
+    msg_out "Installing grub in ${dev[/]}"
+    _star_e
+    grub-install --target=i386-pc "${dev[/]}"
+    
+    cp jinarch jinarch.conf /mnt/ &&
+    msg_out "Copied $pname to /mnt" ||
+    err_exit "Failed to copy $pname to /mnt"
     
     _star_s
     msg_out 'Changing root to new system'
     msg_out "arch-chroot /mnt"
     _star_e
-    arch-chroot /mnt "'$myself' --chroot; exec $SHELL"
+    arch-chroot /mnt ./$pname --chroot;exec $SHELL
 
 fi
 
 if [ "$1" = --chroot ]; then
 
-    _star_s
+    _star_s chroot
     msg_out 'Setting time zone'
     msg_out 'ln -sf /usr/share/zoneinfo/Region/City /etc/localtime'
     msg_out "hwclock --systohc' to generate /etc/adjtime"
@@ -375,7 +435,7 @@ if [ "$1" = --chroot ]; then
     hwclock --systohc
 
 
-    _star_s
+    _star_s chroot
     msg_out 'Setting locale'
     _star_e
 
@@ -389,7 +449,7 @@ if [ "$1" = --chroot ]; then
 
     insert_prop LANG "$lang" /etc/locale.conf
 
-    _star_s
+    _star_s chroot
     msg_out 'KeyMap settings'
     _star_e
     keymap_conf=/etc/vconsole.conf
@@ -397,7 +457,7 @@ if [ "$1" = --chroot ]; then
     KEYMAP=$(get_prop_input $keymap_prop "$DEF_KEYMAP" "Enter keymap" list_keymaps)
     insert_prop $keymap_prop $KEYMAP "$keymap_conf"
 
-    _star_s
+    _star_s chroot
     msg_out 'Teypematic delay and rate'
     msg_out 'The typematic delay indicates the amount of time'
     msg_out '(typically in miliseconds) a key needs to be pressed and held'
@@ -432,7 +492,7 @@ if [ "$1" = --chroot ]; then
     err_out "Failed to enable kbdrate.service"
 
 
-    _star_s
+    _star_s chroot
     msg_out 'Setting hostname'
     _star_e
     hf=/etc/hostname
@@ -447,18 +507,17 @@ if [ "$1" = --chroot ]; then
     msg_out "Appended '$hs' to $hostsf" ||
     err_out "Failed to append '$hs' to $hostsf"
 
-
-    _star_s
+    _star_s chroot
     msg_out 'Checking network status in chroot'
     _star_e
     chknet
 
-    _star_s
+    _star_s chroot
     msg_out 'Setting the root password'
     _star_e
     passwd
 
-    _star_s
+    _star_s chroot
     msg_out 'Installing bootloader'
     _star_e
     yn=$(get_prop_yn INTEL_UCODE "$DEF_INTEL_UCODE" 'Do you wish to enable microcode update ('must' for Intel CPU)')
@@ -468,21 +527,25 @@ if [ "$1" = --chroot ]; then
     else
         msg_out 'Continuing without microcode update'
     fi
+    update-grub
     
-    _star_s
+    _star_s chroot
     msg_out 'Setting the default login shell'
     _star_e
     shell=$(select_shell)
     chsh -s "$shell"
     
     
-    _star_s
+    _star_s chroot
     msg_out 'Creating a standard user'
     _star_e
     user=$(get_prop_input USER "$DEF_USER" 'Enter a user name')
+    groupdel sudo 2>/dev/null
     groupadd sudo &&
     msg_out 'Created a group named sudo' ||
     err_out 'Failed to create sudo group'
+    userdel jahid 2>/dev/null
+    groupdel jahid 2>/dev/null
     useradd -m -U -G sudo -s "$shell" "$user" &&
     msg_out "Successfully created user $user" ||
     err_out "Failed to create user $user"
@@ -493,13 +556,16 @@ if [ "$1" = --chroot ]; then
     err_out "Failed to enable group sudo in $sudoers"
     
     
-    _star_s
+    _star_s chroot
     msg_out 'We will leave the chroot in your hand so that you may make'
     msg_out "additional changes. When you are done, run 'exit' to exit"
     _star_e
     
+    exec $SHELL
 fi
 
+msg_out "Cleaning ..."
+rm -f /mnt/jinarch /mnt/jinarch.conf /mnt/help /mnt/prepare
 
 msg_out 'Done'
 
