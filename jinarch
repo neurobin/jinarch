@@ -1,7 +1,17 @@
 #!/bin/bash
 . jinarch.conf
 msg_out(){
-	printf "\n*** $*\n" > /dev/stdout
+	printf "*** $*\n" > /dev/stdout
+}
+
+_star_s(){
+    local s='***************************************************************'
+    printf "\n\n\n*** $s\n" > /dev/stdout
+}
+
+_star_e(){
+    local s='***************************************************************'
+    printf "*** $s\n" > /dev/stdout
 }
 
 err_out(){
@@ -60,7 +70,6 @@ get_prop_input(){
 	local bval="${!prop}"
 	local val="$bval"
 	if [ "$bval" = "" ]; then
-        $cmd
 		val=$(get_input "$msg (default '$def'): " "$timeout")
 		if [ "$val" = "" ]; then
 			val="$def"
@@ -75,22 +84,36 @@ insert_prop(){
     val=$2
     file=$3
     if grep -qs -e "^[[:blank:]]*$prop[[:blank:]]*=[[:blank:]]*" "$file"; then
-        sed -i.bak "s/\(^[[:blank:]]*$prop[[:blank:]]*=[[:blank:]]*\).*/\1$val/" "$file"
+        sed -i.bak "s/\(^[[:blank:]]*$prop[[:blank:]]*=[[:blank:]]*\).*/\1$val/" "$file" &&
+        msg_out "Successfully inserted '$prop=$val' in $file" ||
+        err_out "Failed to insert '$prop=$val' in $file"
     else
-        cat >> "$file" <<< "$prop=$val"
+        cat >> "$file" <<< "$prop=$val" &&
+        msg_out "Successfully inserted '$prop=$val' in $file" ||
+        err_out "Failed to insert '$prop=$val' in $file"
     fi
 }
 
+_star_s
 msg_out 'KeyMap settings'
+_star_e
 keymap_conf=/etc/vconsole.conf
 keymap_prop=KEYMAP
 KEYMAP=$(get_prop_input $keymap_prop us "Enter keymap" list_keymaps)
 insert_prop $keymap_prop $KEYMAP "$keymap_conf"
 
+_star_s
 msg_out 'Teypematic delay and rate'
-msg_out 'The typematic delay indicates the amount of time (typically in miliseconds) a key needs to be pressed and held in order for the repeating process to begin. After the repeating process has been triggered, the character will be repeated with a certain frequency (usually given in Hz) specified by the typematic rate. These values can be changed using the kbdrate command'
-KBD_DELAY=200
-KBD_RATE=30
+msg_out 'The typematic delay indicates the amount of time'
+msg_out '(typically in miliseconds) a key needs to be pressed and held'
+msg_out 'in order for the repeating process to begin.'
+msg_out 'After the repeating process has been triggered,'
+msg_out 'the character will be repeated with a certain frequency'
+msg_out '(usually given in Hz) specified by the typematic rate.'
+msg_out 'These values can be changed using the kbdrate command'
+_star_e
+KBD_DELAY=$(get_prop_input KBD_DELAY 200 'Enter typematic delay')
+KBD_RATE=$(get_prop_input KBD_RATE 30 'Enter typematic rate')
 kbdrate_service_s="[Unit]
 Description=Keyboard repeat rate in tty.
 
@@ -105,8 +128,29 @@ ExecStart=/usr/bin/kbdrate -s -d $KBD_DELAY -r $KBD_RATE
 WantedBy=multi-user.target
 "
 kbdrate_service_f=/etc/systemd/system/kbdrate.service
-cat > "$kbdrate_service_f" <<< "$kbdrate_service_s"
-systemctl enable kbdrate
+cat > "$kbdrate_service_f" <<< "$kbdrate_service_s" &&
+msg_out "Sucessfully created $kbdrate_service_f with content: 
+$kbdrate_service_s" ||
+err_out "Failed to create $kbdrate_service_f"
+systemctl enable kbdrate &&
+msg_out "Successfully enabled kbdrate.service" ||
+err_out "Failed to enable kbdrate.service"
 
-##Checking network connection
+_star_s
+msg_out Checking network connection
+_star_e
+dhcpcd
 ping -c 1 google.com
+if [ $? -eq 0 ]; then
+    msg_out "Network test passed"
+else
+    err_out "Network test failed"
+fi
+
+_star_s
+msg_out 'Updating the system clock'
+_star_e
+timedatectl set-ntp true &&
+msg_out "Successfully ran 'timedatectl set-ntp true'" ||
+err_out "Failed to update the system clock"
+
