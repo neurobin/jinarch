@@ -55,6 +55,6 @@ The installation involves the following steps:
 18. Creating a standard user account with sudo access
 19. Leave the chroot open for further modification
 
-After the last step, the `chroot` is left open. You can modify your new system as you wish. After it's done, run `exit` to exit the chroot and clean the system. After exiting chroot, you will land on the original terminal prompt again.
+After the last step, the `chroot` is left open. You can modify your new system as you wish. After you are done, run `exit` to exit the chroot (some cleaning steps are done here). After exiting chroot, you will land on the original terminal prompt again. That's it.
 
 **You can reboot now**
