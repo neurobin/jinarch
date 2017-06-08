@@ -14,8 +14,7 @@ DEF_KEYMAP=us
 DEF_KBD_DELAY=200
 DEF_KBD_RATE=30
 DEF_MIRRORS=20
-DEF_TIME_REGION=Asia
-DEF_TIME_CITY=Dhaka
+DEF_TIME_ZONE=Asia/Dhaka
 DEF_LOCALE_LANG=en_US.UTF-8
 DEF_HOSTNAME=archlinux
 DEF_INTEL_UCODE=y
@@ -117,6 +116,7 @@ get_yes_no(){
         fi
         if [ "$yn" = yes ]; then
             echo yes > /dev/stdout
+            break
         elif [ "$yn" = no ]; then
             echo no > /dev/stdout
             break
@@ -228,6 +228,10 @@ update_mirrorlist(){
 }
 
 select_shell(){
+    if [ "$LOGIN_SHELL" != '' ] && chkcmd "$LOGIN_SHELL"; then
+        echo "$LOGIN_SHELL"
+        return 0
+    fi
     while IFS=  read -r -d $'\n'; do
     if [[ "${REPLY:0:1}" = / ]]; then
         array+=("$REPLY")
@@ -241,7 +245,7 @@ select_shell(){
 
     arri=""
     while [[ ! "$arri" =~ ^[0-9]+$ ]];do
-        read -r -p "Enter your choice: " arri
+        read -r -p "Enter your choice: " arri >>/dev/stderr
     done
     echo "${array[arri]}"
 }
@@ -305,6 +309,9 @@ get_uuid(){
 
 finish(){
     mounted=$(mount |awk '{print $3}')
+    rm -f /mnt/usr/bin/jinarch /mnt/etc/jinarch.conf /mnt/jinarch /mnt/jinarch.conf &&
+    msg_out "Uninstalled $pname" ||
+    err_out "Failed to uninstall $pname"
     for (( idx=${#mps[@]}-1 ; idx>=0 ; idx-- )) ; do
         mp="${mps[idx]}"
         mpt="/mnt$mp"
@@ -317,9 +324,6 @@ finish(){
             fi
         fi
     done
-    rm -f /mnt/jinarch /mnt/jinarch.conf &&
-    msg_out "Deleted jinarch" ||
-    err_out "Failed to delete jinarch"
 }
 
 chkroot
@@ -346,7 +350,16 @@ if [ "$1" = '' ]; then
     msg_out "We do not create/delete/change/format partitions in any way."
     msg_out 'Please prepare the paritions manually. You may use tools like'
     msg_out 'parted, cfdisk etc...'
+    msg_out 'If you are in a virtual console, you can use Alt+Arrows  to'
+    msg_out 'open up terminals to do additional tasks.'
     _star_e
+    
+    while true; do
+        yn=$(get_yes_no "Are the partitions ready")
+        if [ "$yn" = yes ]; then
+            break
+        fi
+    done
     
     declare -A dev
     fmps=()
@@ -415,14 +428,16 @@ if [ "$1" = '' ]; then
     msg_out Copying files ...
     _star_e
     #pacstrap /mnt base
-    rsync -aAXv --update --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found","/var/cache/pacman/pkg/*"} / /mnt
+    rsync -aAXv --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found","/var/cache/pacman/pkg/*"} / /mnt
 
     _star_s
     msg_out Generating /etc/fstab file
     msg_out 'genfstab -U /mnt >> /mnt/etc/fstab'
     _star_e
     genfstab -U /mnt >> /mnt/etc/fstab
-    cat >> /mnt/etc/fstab <<< "$fstabs"
+    cat >> /mnt/etc/fstab <<< "$fstabs" &&
+    msg_out "Successfully generated fstab" ||
+    err_out "Failed to generate fstab"
     
     _star_s
     msg_out "Installing grub"
@@ -455,7 +470,9 @@ if [ "$1" = '' ]; then
     msg_out 'Changing root to new system'
     msg_out "arch-chroot /mnt"
     _star_e
-    arch-chroot /mnt ./$pname --chroot
+    arch-chroot /mnt ./$pname --chroot &&
+    msg_out "Entered in chroot of the new system" ||
+    err_out "Failed to chroot into the new system"
 
 fi
 
@@ -467,7 +484,8 @@ if [ "$1" = --chroot ]; then
     msg_out "hwclock --systohc' to generate /etc/adjtime"
     _star_e
 
-    ln -sf "/usr/share/zoneinfo/$TIME_REGION/$TIME_CITY" /etc/localtime
+    time_zone=$(get_prop_input TIME_ZONE "$DEF_TIME_ZONE" "Enter time zone")
+    ln -sf "/usr/share/zoneinfo/$time_zone" /etc/localtime
     hwclock --systohc
 
 
@@ -597,6 +615,7 @@ if [ "$1" = --chroot ]; then
     msg_out "additional changes. When you are done, run 'exit' to exit"
     _star_e
     
+    export PS1="(chroot) $PS1"
     exec $SHELL
 fi
 
