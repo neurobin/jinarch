@@ -1,5 +1,19 @@
 #!/bin/bash
+myself="$BASH_SOURCE"
+pname=$(basename "$myself")
 . jinarch.conf
+pname=jinarch
+DEF_KEYMAP=us
+DEF_KBD_DELAY=200
+DEF_KBD_RATE=30
+DEF_MIRRORS=20
+DEF_TIME_REGION=Asia
+DEF_TIME_CITY=Dhaka
+DEF_LOCALE_LANG=en_US.UTF-8
+DEF_HOSTNAME=archlinux
+DEF_INTEL_UCODE=y
+DEF_USER="$pname"
+DEF_OPT_DEV=none
 msg_out(){
 	printf "*** $*\n" > /dev/stdout
 }
@@ -41,6 +55,75 @@ chknorm(){
 	fi
 }
 
+chkcmd(){
+    if command -v "$1" >/dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+get_yn(){
+	#$1: msg
+	#$2: timeout
+	local msg="
+	=== $(printf "$1")"
+	msg=$(echo "$msg" |sed -e 's/^[[:blank:]]*//')
+	local yn
+    local timeout="$2"
+	if [ "$timeout" = "" ]; then
+		read -p "$msg" yn >/dev/null 2>&1
+	else
+		read -t "$timeout" -p "$msg" yn >/dev/null 2>&1
+	fi
+	if [ "$yn" = y ]; then
+		echo y > /dev/stdout
+    else
+        echo "$yn" > /dev/stdout
+	fi
+}
+
+get_yes_no(){
+	#$1: msg
+	#$2: timeout
+    local msg="
+    === $(printf "$1")"
+    msg=$(echo "$msg" |sed -e 's/^[[:blank:]]*//')
+    local yn
+    local timeout="$2"
+    while true; do
+        if [ "$timeout" = "" ]; then
+            read -p "$msg (yes/no)?: " yn >/dev/null
+        else
+            read -t "$timeout" -p "$msg (yes/no)?: " yn >/dev/null
+        fi
+        if [ "$yn" = yes ]; then
+            echo yes > /dev/stdout
+        elif [ "$yn" = no ]; then
+            echo no > /dev/stdout
+            break
+        else
+            err_out "Either enter 'yes' or 'no'"
+        fi
+    done
+}
+
+get_prop_yn(){
+	local prop="$1"
+	local def="$2"
+	local msg="$3"
+    local cmd="$4"
+    local timeout="$5"
+	local bval="${!prop}"
+	local val="$bval"
+	if [ "$bval" = "" ]; then
+        $cmd > /dev/stderr
+		local val=$(get_yn "$msg (Y/n)? (default '$def'): " "$timeout")
+		[ "$val" = "" ] && val="$def"
+	fi
+	echo "$val" >/dev/stdout
+}
+
 get_input(){
 	#$1: msg
 	#$2: timeout
@@ -58,18 +141,34 @@ get_input(){
 }
 
 list_keymaps(){
+    msg_out 'Listing keymaps ...'
     find /usr/share/kbd/keymaps -type f -printf '%P\n' |sed -e 's=.*/==' -e 's/\..*$//' | sort -u
+}
+
+chknet(){
+    dhcpcd
+    if ping -c 1 google.com
+        msg_out 'Network available'
+        return 0
+    elif ping -c 1 8.8.8.8
+        wrn_out 'Network available but DNS resolving not working. Fix /etc/resolv.conf'
+        return 1
+    else
+        wrn_out 'Network not available'
+        return 2
+    fi
 }
 
 get_prop_input(){
 	local prop="$1"
 	local def="$2"
 	local msg="$3"
-    local cmd=$4
+    local cmd="$4"
     local timeout="$5"
 	local bval="${!prop}"
 	local val="$bval"
 	if [ "$bval" = "" ]; then
+        $cmd > /dev/stderr
 		val=$(get_input "$msg (default '$def'): " "$timeout")
 		if [ "$val" = "" ]; then
 			val="$def"
@@ -94,63 +193,314 @@ insert_prop(){
     fi
 }
 
-_star_s
-msg_out 'KeyMap settings'
-_star_e
-keymap_conf=/etc/vconsole.conf
-keymap_prop=KEYMAP
-KEYMAP=$(get_prop_input $keymap_prop us "Enter keymap" list_keymaps)
-insert_prop $keymap_prop $KEYMAP "$keymap_conf"
+rename_mv(){
+    mv -f "$1" "$2" &&
+    msg_out "Renamed $1 --> $2" ||
+    err_out "Failed to rename $1 -- > $2"
+}
 
-_star_s
-msg_out 'Teypematic delay and rate'
-msg_out 'The typematic delay indicates the amount of time'
-msg_out '(typically in miliseconds) a key needs to be pressed and held'
-msg_out 'in order for the repeating process to begin.'
-msg_out 'After the repeating process has been triggered,'
-msg_out 'the character will be repeated with a certain frequency'
-msg_out '(usually given in Hz) specified by the typematic rate.'
-msg_out 'These values can be changed using the kbdrate command'
-_star_e
-KBD_DELAY=$(get_prop_input KBD_DELAY 200 'Enter typematic delay')
-KBD_RATE=$(get_prop_input KBD_RATE 30 'Enter typematic rate')
-kbdrate_service_s="[Unit]
-Description=Keyboard repeat rate in tty.
+update_mirrorlist(){
+    n=$(get_prop_input MIRRORS $DEF_MIRRORS 'Enter no. of mirrors to include')
+    rename_mv /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bkp
+    reflector --verbose --latest "$n" --sort rate --save /etc/pacman.d/mirrorlist
+}
 
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-StandardInput=tty
-StandardOutput=tty
-ExecStart=/usr/bin/kbdrate -s -d $KBD_DELAY -r $KBD_RATE
- 
-[Install]
-WantedBy=multi-user.target
-"
-kbdrate_service_f=/etc/systemd/system/kbdrate.service
-cat > "$kbdrate_service_f" <<< "$kbdrate_service_s" &&
-msg_out "Sucessfully created $kbdrate_service_f with content: 
-$kbdrate_service_s" ||
-err_out "Failed to create $kbdrate_service_f"
-systemctl enable kbdrate &&
-msg_out "Successfully enabled kbdrate.service" ||
-err_out "Failed to enable kbdrate.service"
+select_shell(){
+    while IFS=  read -r -d $'\n'; do
+    if [[ "${REPLY:0:1}" = / ]]; then
+        array+=("$REPLY")
+    fi
+    done < <(cat /etc/shells)
 
-_star_s
-msg_out Checking network connection
-_star_e
-dhcpcd
-ping -c 1 google.com
-if [ $? -eq 0 ]; then
-    msg_out "Network test passed"
-else
-    err_out "Network test failed"
+    printf "\nChoose a shell to set as the login shell:\n" >>/dev/stderr
+    for((i=0;i<${#array[@]};i++));do
+        echo "$i.       ${array[$i]}" >>/dev/stderr
+    done
+
+    arri=""
+    while [[ ! "$arri" =~ ^[0-9]+$ ]];do
+        read -r -p "Enter your choice: " arri
+    done
+    echo "${array[arri]}"
+}
+
+get_partition_mand(){
+    mp=$1
+    while [ "$fs" = '' ]; do
+        fs=$(get_prop_input FILE_SYSTEM_DEV '' "Enter the device id for mount point: $mp")
+        udevadm info -q symlink -n "$fs" >/dev/stderr &&
+        msg_out "^--Output of command: 'udevadm info -q symlink -n $fs'" >/dev/stderr || fs=
+        fdisk -l "$fs" >/dev/stderr &&
+        msg_out "^--Output of command: 'fdisk -l $fs'" >/dev/stderr || fs=
+        fdisk -l | grep "$fs" >/dev/stderr &&
+        msg_out "^--Output of command: 'fdisk -l | grep $fs'" >/dev/stderr || fs=
+        df -H |grep "$fs" >/dev/stderr &&
+        msg_out "^--Output of command 'df -H |grep $fs'" >/dev/stderr || fs=
+        if [ "$fs" = '' ]; then
+            err_out "Invalid device id: $fs"
+        fi
+        yes=$(get_yes_no "Is this the right device for mount point $mp")
+        if [ "$yes" != yes ]; then
+            fs=
+        fi
+        if [ "$fs" != '' ]; then
+            break
+        fi
+    done
+    echo "$fs" >/dev/stdout
+}
+
+is_valid_part(){
+    fs=$1
+    mp=$2
+    if [ "$fs" = '' -o "$fs" = none ]; then
+        return 1
+    fi
+    udevadm info -q symlink -n "$fs" >/dev/stderr &&
+    msg_out "^--Output of command: 'udevadm info -q symlink -n $fs'" >/dev/stderr || fs=
+    fdisk -l "$fs" >/dev/stderr &&
+    msg_out "^--Output of command: 'fdisk -l $fs'" >/dev/stderr || fs=
+    fdisk -l | grep "$fs" >/dev/stderr &&
+    msg_out "^--Output of command: 'fdisk -l | grep $fs'" >/dev/stderr || fs=
+    df -H |grep "$fs" >/dev/stderr &&
+    msg_out "^--Output of command 'df -H |grep $fs'" >/dev/stderr || fs=
+    if [ "$fs" = '' ]; then
+        return 1
+    fi 
+    yes=$(get_yes_no "Is this the right device for mount point $mp")
+    if [ "$yes" = yes ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+if [ "$1" = '' ]; then
+
+    _star_s
+    msg_out Checking network connection
+    _star_e
+    chknet
+
+    _star_s
+    msg_out 'Updating the system clock'
+    _star_e
+    timedatectl set-ntp true &&
+    msg_out "Successfully ran 'timedatectl set-ntp true'" ||
+    err_out "Failed to update the system clock"
+
+
+    _star_s
+    msg_out Mounting partitions
+    msg_out "We do not create/delete/change/format partitions in any way."
+    msg_out 'Please prepare the paritions manually. You may use tools like'
+    msg_out 'parted, cfdisk etc...'
+    _star_e
+    
+    mps=('/' '/boot' '/home' '/var' '/tmp')
+    declare -A opn=([/boot]=BOOT_DEV [/home]=HOME_DEV [/var]=VAR_DEV [/tmp]=TMP_DEV)
+    declare -A dev
+    fmps=()
+    for mp in "${mps[@]}"; do
+        if [ "$mp" = '/' ]; then
+            dev[$mp]=$(get_partition_mand $mp)
+            fmps+=("$mp")
+        else
+            d=$(get_prop_input $opn[$mp] "$DEF_OPT_DEV" "Enter device id for mount point $mp")
+            if is_valid_part "$d" $mp; then
+                dev[$mp]=$d
+                fmps+=("$mp")
+            fi
+        fi 
+    done
+    
+    for mp in "${fmps[@]}"; do
+        mpdir="/mnt$mp"
+        mkdir -p "$mpdir"
+        umount "$mpdir" 2>/dev/null || umount -lf "$mpdir" 2>/dev/null
+        mount "${dev[$mp]}" "$mpdir" &&
+        msg_out "Successfully mounted ${dev[$mp]} in $mpdir" ||
+        err_exit "Failed to mount ${dev[$mp]} in $mpdir"
+    done
+
+    _star_s
+    msg_out Selecting mirrors
+    msg_out 'We use the reflector tool from the repository to rank the mirrors.'
+    msg_out 'If you wish to do this yourself, you may halt this step and open'
+    msg_out 'another terminal (Alt+Arrows in virtual console) and use your own'
+    msg_out 'method (e.g using rankmirrors). Skip this step ((y/n):n) when done'
+    _star_e
+
+    yn=$(get_prop_yn USE_REFLECTOR y 'Update mirrors with reflector ranking')
+
+    if [ "$yn" = y ]; then
+        if ! chkcmd reflector; then
+            pacman -S reflector
+        fi
+        update_mirrorlist
+    else
+        msg_out 'Continuing without changing mirrorlist'
+    fi
+
+    _star_s
+    msg_out Installing the base packages
+    msg_out 'pacstrap /mnt base'
+    _star_e
+    pacstrap /mnt base
+
+    _star_s
+    msg_out Generating /etc/fstab file
+    msg_out 'genfstab -U /mnt >> /mnt/etc/fstab'
+    _star_e
+    genfstab -U /mnt >> /mnt/etc/fstab
+    
+    _star_s
+    msg_out 'Changing root to new system'
+    msg_out "arch-chroot /mnt"
+    _star_e
+    arch-chroot /mnt "'$myself' --chroot; exec $SHELL"
+
 fi
 
-_star_s
-msg_out 'Updating the system clock'
-_star_e
-timedatectl set-ntp true &&
-msg_out "Successfully ran 'timedatectl set-ntp true'" ||
-err_out "Failed to update the system clock"
+if [ "$1" = --chroot ]; then
+
+    _star_s
+    msg_out 'Setting time zone'
+    msg_out 'ln -sf /usr/share/zoneinfo/Region/City /etc/localtime'
+    msg_out "hwclock --systohc' to generate /etc/adjtime"
+    _star_e
+
+    ln -sf "/usr/share/zoneinfo/$TIME_REGION/$TIME_CITY" /etc/localtime
+    hwclock --systohc
+
+
+    _star_s
+    msg_out 'Setting locale'
+    _star_e
+
+    lang=$(get_prop_input LOCALE_LANG "$DEF_LOCALE_LANG" 'Enter your locale language')
+
+    # uncomment $lang in /etc/locale.gen
+    locale_gen=/etc/locale.gen
+    sed -i.bak -e "s/^[[:blank:]]*#\([[:blank:]]*$lang[[:blank:]]*.*\)/\1/i" "$locale_gen" &&
+    msg_out "Enabled $lang in $locale_gen" ||
+    err_out "Failed to enable $lang in locale_gen"
+
+    insert_prop LANG "$lang" /etc/locale.conf
+
+    _star_s
+    msg_out 'KeyMap settings'
+    _star_e
+    keymap_conf=/etc/vconsole.conf
+    keymap_prop=KEYMAP
+    KEYMAP=$(get_prop_input $keymap_prop "$DEF_KEYMAP" "Enter keymap" list_keymaps)
+    insert_prop $keymap_prop $KEYMAP "$keymap_conf"
+
+    _star_s
+    msg_out 'Teypematic delay and rate'
+    msg_out 'The typematic delay indicates the amount of time'
+    msg_out '(typically in miliseconds) a key needs to be pressed and held'
+    msg_out 'in order for the repeating process to begin.'
+    msg_out 'After the repeating process has been triggered,'
+    msg_out 'the character will be repeated with a certain frequency'
+    msg_out '(usually given in Hz) specified by the typematic rate.'
+    msg_out 'These values can be changed using the kbdrate command'
+    _star_e
+    KBD_DELAY=$(get_prop_input KBD_DELAY "$DEF_KBD_DELAY" 'Enter typematic delay')
+    KBD_RATE=$(get_prop_input KBD_RATE "$DEF_KBD_RATE" 'Enter typematic rate')
+    kbdrate_service_s="[Unit]
+    Description=Keyboard repeat rate in tty.
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    StandardInput=tty
+    StandardOutput=tty
+    ExecStart=/usr/bin/kbdrate -s -d $KBD_DELAY -r $KBD_RATE
+     
+    [Install]
+    WantedBy=multi-user.target
+    "
+    kbdrate_service_f=/etc/systemd/system/kbdrate.service
+    cat > "$kbdrate_service_f" <<< "$kbdrate_service_s" &&
+    msg_out "Sucessfully created $kbdrate_service_f with content: 
+    $kbdrate_service_s" ||
+    err_out "Failed to create $kbdrate_service_f"
+    systemctl enable kbdrate &&
+    msg_out "Successfully enabled kbdrate.service" ||
+    err_out "Failed to enable kbdrate.service"
+
+
+    _star_s
+    msg_out 'Setting hostname'
+    _star_e
+    hf=/etc/hostname
+    hn=$(get_prop_input HOSTNAME "$DEF_HOSTNAME" 'Enter hostname')
+    cat > "$hf" <<< "$hn" && 
+    msg_out "Wrote $hn to $hf" ||
+    err_out "Failed to write $hn to $hf"
+
+    hostsf=/etc/hosts
+    hs="17.0.1.1    $hn.localdomain $hn"
+    cat >> "$hostsf" <<< "$hs" &&
+    msg_out "Appended '$hs' to $hostsf" ||
+    err_out "Failed to append '$hs' to $hostsf"
+
+
+    _star_s
+    msg_out 'Checking network status in chroot'
+    _star_e
+    chknet
+
+    _star_s
+    msg_out 'Setting the root password'
+    _star_e
+    passwd
+
+    _star_s
+    msg_out 'Installing bootloader'
+    _star_e
+    yn=$(get_prop_yn INTEL_UCODE "$DEF_INTEL_UCODE" 'Do you wish to enable microcode update ('must' for Intel CPU)')
+    if [ "$yn" = y ]; then
+        pacman -S intel-ucode
+        grub-mkconfig -o /boot/grub/grub.cfg
+    else
+        msg_out 'Continuing without microcode update'
+    fi
+    
+    _star_s
+    msg_out 'Setting the default login shell'
+    _star_e
+    shell=$(select_shell)
+    chsh -s "$shell"
+    
+    
+    _star_s
+    msg_out 'Creating a standard user'
+    _star_e
+    user=$(get_prop_input USER "$DEF_USER" 'Enter a user name')
+    groupadd sudo &&
+    msg_out 'Created a group named sudo' ||
+    err_out 'Failed to create sudo group'
+    useradd -m -U -G sudo -s "$shell" "$user" &&
+    msg_out "Successfully created user $user" ||
+    err_out "Failed to create user $user"
+    passwd "$user"
+    sudoers=/etc/sudoers
+    sed -i.bak -e 's/^[[:blank:]]*#*[[:blank:]]*\(%sudo[[:blank:]][[:blank:]]*ALL=(ALL).*\)/\1/' "$sudoers" &&
+    msg_out "Enabled group sudo in $sudoers" ||
+    err_out "Failed to enable group sudo in $sudoers"
+    
+    
+    _star_s
+    msg_out 'We will leave the chroot in your hand so that you may make'
+    msg_out "additional changes. When you are done, run 'exit' to exit"
+    _star_e
+    
+fi
+
+
+msg_out 'Done'
+
+
 
