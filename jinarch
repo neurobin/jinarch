@@ -1,7 +1,14 @@
 #!/bin/bash
 myself="$BASH_SOURCE"
 pname=$(basename "$myself")
-. jinarch.conf
+
+if [ -f /etc/jinarch.conf ]; then
+    . /etc/jinarch.conf
+elif [ -f ./jinarch.conf ]; then
+    . ./jinarch.conf
+else
+    echo "W: jinarch.conf file not found" >/dev/stderr
+fi
 pname=jinarch
 DEF_KEYMAP=us
 DEF_KBD_DELAY=200
@@ -21,14 +28,14 @@ mps=('/' '/boot' '/home' '/var' '/tmp' 'swap')
 declare -A opn=([/boot]=BOOT_DEV [/home]=HOME_DEV [/var]=VAR_DEV [/tmp]=TMP_DEV)
 
 msg_out(){
-	printf "*** $*\n" > /dev/stdout
+	printf "*** $*\n" #> /dev/stdout
 }
 
 _star_s(){
     if [ "$1" = '' ]; then
         title='**********'
     else
-        title=' ($1) '
+        title=" ($1) "
     fi
     local s="************************$title*****************************"
     printf "\n\n\n*** $s\n" > /dev/stdout
@@ -87,10 +94,10 @@ get_yn(){
 	else
 		read -t "$timeout" -p "$msg" yn >/dev/stderr 2>&1
 	fi
-	if [ "$yn" = y ]; then
+	if [ "$yn" = y ] || [ "$yn" = Y ]; then
 		echo y > /dev/stdout
     else
-        echo "$yn" > /dev/stdout
+        echo n > /dev/stdout
 	fi
 }
 
@@ -132,7 +139,11 @@ get_prop_yn(){
 		local val=$(get_yn "$msg (Y/n)? (default '$def'): " "$timeout")
 		[ "$val" = "" ] && val="$def"
 	fi
-	echo "$val" >/dev/stdout
+    if [ "$val" = y ] || [ "$val" = Y ]; then
+        echo y >/dev/stdout
+    else
+        echo n >/dev/stdout
+    fi
 }
 
 get_input(){
@@ -294,19 +305,26 @@ get_uuid(){
 
 finish(){
     mounted=$(mount |awk '{print $3}')
-    for mp in "${mps[@]}"; do
+    for (( idx=${#mps[@]}-1 ; idx>=0 ; idx-- )) ; do
+        mp="${mps[idx]}"
         mpt="/mnt$mp"
         mpt="${mpt/%\//}"
         if echo "$mounted" |grep -qF "$mpt"; then
             if umount "$mpt" || umount -lf "$mpt" ; then
-                msg_out "unmount proc success"
+                msg_out "unmount $mpt success"
             else
                 err_out "Failed to unmount $mpt"
             fi
         fi
     done
-    rm -f /jinarch /jinarch.conf
+    rm -f /mnt/jinarch /mnt/jinarch.conf &&
+    msg_out "Deleted jinarch" ||
+    err_out "Failed to delete jinarch"
 }
+
+chkroot
+trap finish SIGTERM EXIT SIGQUIT
+
 
 if [ "$1" = '' ]; then
 
@@ -397,7 +415,7 @@ if [ "$1" = '' ]; then
     msg_out Copying files ...
     _star_e
     #pacstrap /mnt base
-    rsync -aAXv --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found"} / /mnt
+    rsync -aAXv --update --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found","/var/cache/pacman/pkg/*"} / /mnt
 
     _star_s
     msg_out Generating /etc/fstab file
@@ -407,9 +425,27 @@ if [ "$1" = '' ]; then
     cat >> /mnt/etc/fstab <<< "$fstabs"
     
     _star_s
-    msg_out "Installing grub in ${dev[/]}"
+    msg_out "Installing grub"
     _star_e
-    grub-install --target=i386-pc "${dev[/]}"
+    
+    gdev="${dev[/]:0:-1}"
+    yn=$(get_yn "Install grub in $gdev (y/n)?: ")
+    if [ "$yn" != y ]; then
+        gdevt=$(get_input "Enter the device for installing grub (default: $gdev): ")
+        if [ "$gdevt" != '' ]; then
+            gdev=$gdevt
+        fi
+    fi
+    msg_out "Installing grub in $gdev ..."
+    grub-install --target=i386-pc "$gdev"
+    
+    if [ ! $? -eq 0 ]; then
+        err_out "Grub install failed"
+        yn=$(get_yn "Continue without grub (y/n)?: ")
+        if [ "$yn" != y ]; then
+            err_exit "Aborted on grub-install failure"
+        fi
+    fi
     
     cp jinarch jinarch.conf /mnt/ &&
     msg_out "Copied $pname to /mnt" ||
@@ -419,7 +455,7 @@ if [ "$1" = '' ]; then
     msg_out 'Changing root to new system'
     msg_out "arch-chroot /mnt"
     _star_e
-    arch-chroot /mnt ./$pname --chroot;exec $SHELL
+    arch-chroot /mnt ./$pname --chroot
 
 fi
 
@@ -502,7 +538,7 @@ if [ "$1" = --chroot ]; then
     err_out "Failed to write $hn to $hf"
 
     hostsf=/etc/hosts
-    hs="17.0.1.1    $hn.localdomain $hn"
+    hs="127.0.1.1    $hn.localdomain $hn"
     cat >> "$hostsf" <<< "$hs" &&
     msg_out "Appended '$hs' to $hostsf" ||
     err_out "Failed to append '$hs' to $hostsf"
@@ -563,9 +599,6 @@ if [ "$1" = --chroot ]; then
     
     exec $SHELL
 fi
-
-msg_out "Cleaning ..."
-rm -f /mnt/jinarch /mnt/jinarch.conf /mnt/help /mnt/prepare
 
 msg_out 'Done'
 
