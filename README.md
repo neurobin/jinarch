@@ -2,7 +2,7 @@ An offline Arch Linux installer.
 
 Some configurations that depend on an active internet connection can only be done successfully if network is available.
 
-This kind of offline install is only useful when you are installing from a [custom live cd/dvd](#preparing-a-custom-archlinux-live-cd-dvd-image) where you have a pre-configured system with everything else that you need.
+This kind of offline install is only useful when you are installing from a [custom live cd/dvd](#preparing-a-custom-archlinux-live-cddvd-image) where you have a pre-configured system with everything else that you need.
 
 # USE/INSTALL
 
