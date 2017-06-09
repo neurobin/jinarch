@@ -646,12 +646,9 @@ if [ "$1" = --chroot ]; then
     msg_out 'Creating a standard user'
     _star_e
     user=$(get_prop_input USER "$DEF_USER" 'Enter a user name')
-    groupdel sudo 2>/dev/null
     groupadd sudo &&
     msg_out 'Created a group named sudo' ||
     err_out 'Failed to create sudo group'
-    userdel jahid 2>/dev/null
-    groupdel jahid 2>/dev/null
     useradd -m -U -G sudo -s "$shell" "$user" &&
     msg_out "Successfully created user $user" ||
     err_out "Failed to create user $user"
