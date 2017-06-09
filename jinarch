@@ -535,6 +535,18 @@ if [ "$1" = --chroot ]; then
             err_exit "Aborted on grub-install failure"
         fi
     fi
+    
+    _star_s chroot
+    msg_out 'Configuring grub'
+    _star_e
+    yn=$(get_prop_yn INTEL_UCODE "$DEF_INTEL_UCODE" 'Do you wish to enable microcode update ('must' for Intel CPU)')
+    if [ "$yn" = y ]; then
+        pacman -S intel-ucode
+    else
+        msg_out 'Continuing without microcode update'
+    fi
+    grub-mkconfig -o /boot/grub/grub.cfg
+    update-grub
 
     _star_s chroot
     msg_out 'Setting time zone'
@@ -628,18 +640,6 @@ if [ "$1" = --chroot ]; then
     msg_out 'Setting the root password'
     _star_e
     passwd
-
-    _star_s chroot
-    msg_out 'Installing bootloader'
-    _star_e
-    yn=$(get_prop_yn INTEL_UCODE "$DEF_INTEL_UCODE" 'Do you wish to enable microcode update ('must' for Intel CPU)')
-    if [ "$yn" = y ]; then
-        pacman -S intel-ucode
-        grub-mkconfig -o /boot/grub/grub.cfg
-    else
-        msg_out 'Continuing without microcode update'
-    fi
-    update-grub
     
     _star_s chroot
     msg_out 'Setting the default login shell'
