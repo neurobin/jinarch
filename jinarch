@@ -402,11 +402,12 @@ if [ "$1" = '' ]; then
     msg_out 'open up terminals to do additional tasks.'
     _star_e
     
+    yn="$PARTITIONS_READY"
     while true; do
-        yn=$(get_yes_no "Are the partitions ready")
         if [ "$yn" = yes ]; then
             break
         fi
+        yn=$(get_yes_no "Are the partitions ready")
     done
     
     declare -A dev
@@ -493,13 +494,17 @@ if [ "$1" = '' ]; then
     msg_out "Installing grub"
     _star_e
     
-    gdev="${dev[/]:0:-1}"
-    yn=$(get_yn "Install grub in $gdev (y/n)?: ")
-    if [ "$yn" != y ]; then
-        gdevt=$(get_input "Enter the device for installing grub (default: $gdev): ")
-        if [ "$gdevt" != '' ]; then
-            gdev=$gdevt
+    if [ "${DEV[grub]:0:1}" != '/' ]; then
+        gdev="${dev[/]:0:-1}"
+        yn=$(get_yn "Install grub in $gdev (y/n)?: ")
+        if [ "$yn" != y ]; then
+            gdevt=$(get_input "Enter the device for installing grub (default: $gdev): ")
+            if [ "$gdevt" != '' ]; then
+                gdev=$gdevt
+            fi
         fi
+    else
+        gdev="${DEV[grub]}"
     fi
     msg_out "Installing grub in $gdev ..."
     grub-install --target=i386-pc "$gdev"

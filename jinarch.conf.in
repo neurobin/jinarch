@@ -6,9 +6,9 @@
 # ######################################################################
 
 ## Keyboard settings
-KEYMAP=
-KBD_DELAY=
-KBD_RATE=
+KEYMAP=     # e.g us
+KBD_DELAY=  # e.g 200
+KBD_RATE=   # e.g 30
 
 ## Mount points
 # empty mount points will prompt for user input.
@@ -27,14 +27,16 @@ DEV[/tmp]=none            # device id for /tmp
 DEV[swap]=none            # device id for swap
 
 
+DEV[grub]=                 # device id for grub-install, can not be 'none'
 
+PARTITIONS_READY=       # bypass partitions ready? prompt [yes/no]
 
 ##Mirrorlist
-USE_REFLECTOR=          # use the reflector tool to rank mirrors (otherwise do manually)
-MIRRORS=                # No. of mirrors
+USE_REFLECTOR=          # use the reflector tool to rank mirrors (otherwise do manually) [y/n]
+MIRRORS=                # No. of mirrors (e.g 20)
 
 
-LOGIN_SHELL=            # login shell for the user
+LOGIN_SHELL=            # login shell for the user (e.g /bin/bash)
 
 TIME_ZONE=              # time zone (e.g Asia/Dhaka)
 
@@ -42,7 +44,7 @@ LOCALE_LANG=            # locale language (e.g en_US.UTF8)
 
 HOSTNAME=               # hostname
 
-INTEL_UCODE=            # whenther to enable intel microcode update
+INTEL_UCODE=            # whenther to enable intel microcode update [y/n]
 
 USER=                   # username
 
