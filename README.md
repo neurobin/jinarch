@@ -26,8 +26,8 @@ Arch Linux installation can be automated (you will still be prompted for passwor
 
 **jinarch** searches for the configuration file as follows:
 
-1. Firstly, in */etc/jinarch.conf*
-2. secondly, in *./jinarch.conf* (in the current working directory)
+1. Firstly, in *./jinarch.conf* (in the current working directory)
+2. secondly, in */etc/jinarch.conf*
 
 # STEPS
 

@@ -50,10 +50,10 @@ if [ "$1" = -v ] || [ "$1" = --version ]; then
     exit 1
 fi
 
-if [ -f /etc/jinarch.conf ]; then
-    . /etc/jinarch.conf
-elif [ -f ./jinarch.conf ]; then
-    . jinarch.conf
+if [ -f jinarch.conf  ]; then
+    . jinarch.conf 
+elif [ -f /etc/jinarch.conf ]; then
+    . /etc/jinarch.conf 
 else
     echo "W: jinarch.conf file not found" >/dev/stderr
 fi
