@@ -24,7 +24,7 @@ DEV[/home]=               # device id for /home (e.g /dev/sda2)
 DEV[/var]=none            # device id for /var
 DEV[/boot]=none           # device id for /boot
 DEV[/tmp]=none            # device id for /tmp
-DEV[swap]=none            # device id for swap, lsblk -no UUID /dev/sda2
+DEV[swap]=none            # device id for swap
 
 
 

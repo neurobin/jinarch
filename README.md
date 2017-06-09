@@ -2,7 +2,7 @@ An offline Arch Linux installer.
 
 Some configurations that depend on an active internet connection can only be done successfully if network is available.
 
-This kind of offline install is only useful when you are installing from a custom live cd/dvd where you have a pre-configured system with everything else that you need. This project emerged from that kind of requirement where I create my archlinux live cd with [JLIVECD](https://github.com/neurobin/JLIVECD) and install it with **jinarch**.
+This kind of offline install is only useful when you are installing from a [custom live cd/dvd](#preparing-a-custom-archlinux-live-cd-dvd-image) where you have a pre-configured system with everything else that you need.
 
 # USE/INSTALL
 
@@ -58,3 +58,18 @@ The installation involves the following steps:
 After the last step, the `chroot` is left open. You can modify your new system as you wish. After you are done, run `exit` to exit the chroot (some cleaning steps are done here). After exiting chroot, you will land on the original terminal prompt again. That's it.
 
 **You can reboot now**
+
+# Preparing a custom archlinux live cd/dvd image:
+
+Download the official archlinux live iso image. Use it with [JLIVECD](https://github.com/neurobin/JLIVECD) and customize it. Do not forget to install the **jinarch** script in the custom archlinux live OS.
+
+After you have run JLIVECD, there will be a directory named `edit` in your JLIVECD project directory, this is the root filesystem (`/`). Copy the jinarch folder into `edit/mydir` and run the following commands in JLIVECD chroot terminal to install **jinarch** in live OS:
+
+```bash
+cd /mydir/jinarch
+./install.sh
+```
+This will install **jinarch** in the live cd. When you are done with customization, exit JLIVECD chroot and let JLIVECD build the ISO image.
+
+
+
