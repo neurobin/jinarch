@@ -546,7 +546,6 @@ if [ "$1" = --chroot ]; then
         msg_out 'Continuing without microcode update'
     fi
     grub-mkconfig -o /boot/grub/grub.cfg
-    update-grub
 
     _star_s chroot
     msg_out 'Setting time zone'
