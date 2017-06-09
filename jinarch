@@ -38,7 +38,7 @@ myself="$BASH_SOURCE"
 pname=jinarch
 author="Md. Jahidul Hamid <jahidulhamid@yahoo.com>"
 bugt="https://github.com/neurobin/$pname"
-pver='1.0.0'
+pver='1.0.1'
 verinfo="
 *********** $pname ***********
 Version:    $pver
