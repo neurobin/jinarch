@@ -490,7 +490,26 @@ if [ "$1" = '' ]; then
     err_out "Failed to generate fstab"
     
     
+    cp jinarch jinarch.conf /mnt/ 2>/dev/null ||
+    cp /usr/bin/jinarch /etc/jinarch.conf /mnt/ 2>/dev/null
+    [ $? -eq 0 ] &&
+    msg_out "Copied $pname to /mnt" ||
+    err_exit "Failed to copy $pname to /mnt"
+    
     _star_s
+    msg_out 'Changing root to new system'
+    msg_out "arch-chroot /mnt"
+    _star_e
+    arch-chroot /mnt ./$pname --chroot &&
+    msg_out "Entered in chroot of the new system" ||
+    err_out "Failed to chroot into the new system"
+
+fi
+
+if [ "$1" = --chroot ]; then
+
+
+    _star_s chroot
     msg_out "Installing grub"
     _star_e
     
@@ -516,24 +535,6 @@ if [ "$1" = '' ]; then
             err_exit "Aborted on grub-install failure"
         fi
     fi
-    
-    cp jinarch jinarch.conf /mnt/ 2>/dev/null ||
-    cp /usr/bin/jinarch /etc/jinarch.conf /mnt/ 2>/dev/null
-    [ $? -eq 0 ] &&
-    msg_out "Copied $pname to /mnt" ||
-    err_exit "Failed to copy $pname to /mnt"
-    
-    _star_s
-    msg_out 'Changing root to new system'
-    msg_out "arch-chroot /mnt"
-    _star_e
-    arch-chroot /mnt ./$pname --chroot &&
-    msg_out "Entered in chroot of the new system" ||
-    err_out "Failed to chroot into the new system"
-
-fi
-
-if [ "$1" = --chroot ]; then
 
     _star_s chroot
     msg_out 'Setting time zone'
