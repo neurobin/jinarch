@@ -69,6 +69,7 @@ DEF_INTEL_UCODE=y
 DEF_USER="$pname"
 DEF_OPT_DEV=none
 DEF_USE_REFLECTOR=y
+DEF_RSYNC_WITH_HOST=y
 
 
 mps=('/' '/boot' '/home' '/var' '/tmp' 'swap')
@@ -476,8 +477,12 @@ if [ "$1" = '' ]; then
     msg_out Installing the base packages
     msg_out Copying files ...
     _star_e
-    #pacstrap /mnt base
-    rsync -aAXv --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found","/var/cache/pacman/pkg/*"} / /mnt
+    yn=$(get_prop_yn RSYNC_WITH_HOST DEF_RSYNC_WITH_HOST 'rsync with host')
+    if [ "$yn" = y ]; then
+        rsync -aAXv --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found","/var/cache/pacman/pkg/*"} / /mnt
+    else
+        pacstrap /mnt base
+    fi
 
     _star_s
     msg_out Generating /etc/fstab file

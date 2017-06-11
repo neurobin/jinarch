@@ -31,6 +31,8 @@ DEV[grub]=                 # device id for grub-install, can not be 'none'
 
 PARTITIONS_READY=       # bypass partitions ready? prompt [yes/no]
 
+RSYNC_WITH_HOST=        # whether to rsync with host instead of pacstrap [y/n]
+
 ##Mirrorlist
 USE_REFLECTOR=          # use the reflector tool to rank mirrors (otherwise do manually) [y/n]
 MIRRORS=                # No. of mirrors (e.g 20)

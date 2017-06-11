@@ -1,8 +1,6 @@
-An offline Arch Linux installer.
+An Arch Linux installer.
 
 Some configurations that depend on an active internet connection can only be done successfully if network is available.
-
-This kind of offline install is only useful when you are installing from a [custom live cd/dvd](#preparing-a-custom-archlinux-live-cddvd-image) where you have a pre-configured system with everything else that you need.
 
 # USE/INSTALL
 
@@ -31,7 +29,7 @@ Arch Linux installation can be automated (you will still be prompted for passwor
 
 # STEPS
 
-**jinarch** tries to automate an offline installation except the partitioning step. You will have to partition the disks manually. **jinarch** will only let you select the partitions for different mount points (/, /home, /boot, /var etc..) and then mount it. It does not create/delete/change/format any partitions in any way.
+**jinarch** tries to automate archlinux installation except the partitioning step. You will have to partition the disks manually. **jinarch** will only let you select the partitions for different mount points (/, /home, /boot, /var etc..) and then mount it. It does not create/delete/change/format any partitions in any way.
 
 The installation involves the following steps:
 
