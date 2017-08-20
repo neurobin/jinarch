@@ -70,6 +70,7 @@ DEF_USER="$pname"
 DEF_OPT_DEV=none
 DEF_USE_REFLECTOR=y
 DEF_RSYNC_WITH_HOST=y
+DEF_CREATE_USER=y
 
 
 mps=('/' '/boot' '/home' '/var' '/tmp' 'swap')
@@ -477,13 +478,14 @@ if [ "$1" = '' ]; then
     msg_out Installing the base packages
     msg_out Copying files ...
     _star_e
-    yn=$(get_prop_yn RSYNC_WITH_HOST DEF_RSYNC_WITH_HOST 'rsync with host')
+    yn=$(get_prop_yn RSYNC_WITH_HOST $DEF_RSYNC_WITH_HOST 'rsync with host')
     if [ "$yn" = y ]; then
         rsync -aAXv --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found","/var/cache/pacman/pkg/*"} / /mnt
     else
-        yn=$(get_yn "Run pacstrap? (Y/n): ")
+        yn=$(get_yn "Install base using Internet (pacstrap)? (Y/n): ")
         if [[ "$yn" = [Yy] ]]; then
             pacstrap /mnt base
+            cp -L /etc/pacman.d/mirrorlist /mnt/etc/pacman.d/mirrorlist
         fi
     fi
 
@@ -517,6 +519,13 @@ fi
 if [ "$1" = --chroot ]; then
     
 
+    yn=$(get_prop_yn INTEL_UCODE "$DEF_INTEL_UCODE" 'Do you wish to enable microcode update ('must' for Intel CPU)')
+    if [ "$yn" = y ]; then
+        pacman -Sy intel-ucode --noconfirm
+    else
+        msg_out 'Continuing without microcode update'
+    fi
+    
     _star_s chroot
     msg_out "Installing grub"
     _star_e
@@ -544,12 +553,6 @@ if [ "$1" = --chroot ]; then
     _star_e
     grub-mkconfig -o /boot/grub/grub.cfg
     
-    yn=$(get_prop_yn INTEL_UCODE "$DEF_INTEL_UCODE" 'Do you wish to enable microcode update ('must' for Intel CPU)')
-    if [ "$yn" = y ]; then
-        pacman -Sy intel-ucode --noconfirm
-    else
-        msg_out 'Continuing without microcode update'
-    fi
 
     _star_s chroot
     msg_out 'Setting time zone'
@@ -650,22 +653,24 @@ if [ "$1" = --chroot ]; then
     shell=$(select_shell)
     chsh -s "$shell"
     
-    
-    _star_s chroot
-    msg_out 'Creating a standard user'
-    _star_e
-    user=$(get_prop_input USER "$DEF_USER" 'Enter a user name')
-    groupadd sudo &&
-    msg_out 'Created a group named sudo' ||
-    err_out 'Failed to create sudo group'
-    useradd -m -U -G sudo -s "$shell" "$user" &&
-    msg_out "Successfully created user $user" ||
-    err_out "Failed to create user $user"
-    passwd "$user"
-    sudoers=/etc/sudoers
-    sed -i.bak -e 's/^[[:blank:]]*#*[[:blank:]]*\(%sudo[[:blank:]][[:blank:]]*ALL=(ALL).*\)/\1/' "$sudoers" &&
-    msg_out "Enabled group sudo in $sudoers" ||
-    err_out "Failed to enable group sudo in $sudoers"
+    yn=$(get_prop_yn CREATE_USER $DEF_CREATE_USER "Create a standard user")
+    if [ "$yn" = y ]; then
+        _star_s chroot
+        msg_out 'Creating a standard user'
+        _star_e
+        user=$(get_prop_input USER "$DEF_USER" 'Enter a user name')
+        groupadd sudo &&
+        msg_out 'Created a group named sudo' ||
+        err_out 'Failed to create sudo group'
+        useradd -m -U -G sudo -s "$shell" "$user" &&
+        msg_out "Successfully created user $user" ||
+        err_out "Failed to create user $user"
+        passwd "$user"
+        sudoers=/etc/sudoers
+        sed -i.bak -e 's/^[[:blank:]]*#*[[:blank:]]*\(%sudo[[:blank:]][[:blank:]]*ALL=(ALL).*\)/\1/' "$sudoers" &&
+        msg_out "Enabled group sudo in $sudoers" ||
+        err_out "Failed to enable group sudo in $sudoers"
+    fi
     
     
     _star_s chroot
