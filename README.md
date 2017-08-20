@@ -20,7 +20,7 @@ then run as:
 jinarch
 ```
 
-Arch Linux installation can be automated (you will still be prompted for passwords for accounts) using a configuration file **jinarch.conf**. If you installed the script, it should be available as */etc/jinarch.conf*. Or if you are running from a directory as `./jinarch`, you will have to rename the *./jinarch.conf.in* file to *./jinarch.conf* and make necessary changes there.
+Arch Linux installation can be automated using a configuration file **jinarch.conf** (you will still be prompted for passwords for accounts). If you installed the script, it should be available as */etc/jinarch.conf*. Or if you are running from a directory as `./jinarch`, you will have to rename the *./jinarch.conf.in* file to *./jinarch.conf* and make necessary changes there.
 
 **jinarch** searches for the configuration file as follows:
 

@@ -466,7 +466,7 @@ if [ "$1" = '' ]; then
 
     if [ "$yn" = y ]; then
         if ! chkcmd reflector; then
-            pacman -S reflector
+            pacman -Sy reflector --noconfirm
         fi
         update_mirrorlist
     else
@@ -481,7 +481,10 @@ if [ "$1" = '' ]; then
     if [ "$yn" = y ]; then
         rsync -aAXv --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found","/var/cache/pacman/pkg/*"} / /mnt
     else
-        pacstrap /mnt base
+        yn=$(get_yn "Run pacstrap? (Y/n): ")
+        if [[ "$yn" = [Yy] ]]; then
+            pacstrap /mnt base
+        fi
     fi
 
     _star_s
@@ -493,7 +496,7 @@ if [ "$1" = '' ]; then
     cat >> /mnt/etc/fstab <<< "$fstabs" &&
     msg_out "Successfully generated fstab" ||
     err_out "Failed to generate fstab"
-    
+
     
     cp jinarch jinarch.conf /mnt/ 2>/dev/null ||
     cp /usr/bin/jinarch /etc/jinarch.conf /mnt/ 2>/dev/null
@@ -512,21 +515,16 @@ if [ "$1" = '' ]; then
 fi
 
 if [ "$1" = --chroot ]; then
-
+    
 
     _star_s chroot
     msg_out "Installing grub"
     _star_e
     
+    pacman -Sy grub --noconfirm
+    
     if [ "${DEV[grub]:0:1}" != '/' ]; then
-        gdev="${dev[/]:0:-1}"
-        yn=$(get_yn "Install grub in $gdev (y/n)?: ")
-        if [ "$yn" != y ]; then
-            gdevt=$(get_input "Enter the device for installing grub (default: $gdev): ")
-            if [ "$gdevt" != '' ]; then
-                gdev=$gdevt
-            fi
-        fi
+        gdev=$(get_input "Enter the device for installing grub: ")
     else
         gdev="${DEV[grub]}"
     fi
@@ -544,13 +542,14 @@ if [ "$1" = --chroot ]; then
     _star_s chroot
     msg_out 'Configuring grub'
     _star_e
+    grub-mkconfig -o /boot/grub/grub.cfg
+    
     yn=$(get_prop_yn INTEL_UCODE "$DEF_INTEL_UCODE" 'Do you wish to enable microcode update ('must' for Intel CPU)')
     if [ "$yn" = y ]; then
-        pacman -S intel-ucode
+        pacman -Sy intel-ucode --noconfirm
     else
         msg_out 'Continuing without microcode update'
     fi
-    grub-mkconfig -o /boot/grub/grub.cfg
 
     _star_s chroot
     msg_out 'Setting time zone'
